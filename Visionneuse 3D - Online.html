@@ -1,0 +1,639 @@
+<!DOCTYPE html>
+<html lang="fr">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Studio 3D Figurine : Version Intégrale</title>
+    <style>
+        body { margin: 0; overflow: hidden; background-color: #1a1a1a; color: #e0e0e0; font-family: 'Segoe UI', Tahoma, sans-serif; }
+        #bouton-menu { position: absolute; top: 15px; left: 15px; z-index: 100; background: #ffae00; color: #111; border: none; padding: 10px 15px; border-radius: 5px; font-weight: bold; cursor: pointer; box-shadow: 0 4px 6px rgba(0,0,0,0.3); }
+        #panneau-controle { position: absolute; top: 60px; left: 15px; background: rgba(20, 20, 20, 0.95); border-radius: 8px; border: 1px solid #444; width: 340px; box-shadow: 0 4px 15px rgba(0,0,0,0.8); z-index: 90; transition: transform 0.3s; max-height: 85vh; overflow-y: auto; }
+        #panneau-controle.cache { transform: translateX(-120%); opacity: 0; pointer-events: none; }
+        .categorie-header { background: #333; padding: 12px 15px; cursor: pointer; border-bottom: 1px solid #222; font-weight: bold; color: #00e5ff; display: flex; justify-content: space-between; align-items: center; user-select: none; }
+        .categorie-header.actif .icone-fleche { transform: rotate(180deg); }
+        .categorie-contenu { background: rgba(10, 10, 10, 0.5); padding: 0 15px; max-height: 0; overflow: hidden; transition: max-height 0.3s ease-out, padding 0.3s; }
+        label { font-size: 0.82em; display: block; margin-top: 8px; margin-bottom: 4px; color: #ccc;}
+        .input-group { display: flex; align-items: center; gap: 8px; margin-bottom: 5px; }
+        .input-group input[type="range"] { flex: 1; }
+        .input-group input[type="number"] { width: 60px; background: #111; border: 1px solid #555; color: #00e5ff; padding: 2px; border-radius: 3px; font-size: 0.8em; }
+        input[type="file"], select, button.action-btn { width: 100%; margin-bottom: 5px; background: #222; padding: 8px; border-radius: 4px; color: white; border: 1px solid #555; cursor: pointer; }
+        button.action-btn { background: #0088ff; border: none; font-weight: bold; margin-top: 5px; }
+        button.tool-btn { background: #333; border: 1px solid #444; color: #00e5ff; font-size: 0.75em; padding: 5px; cursor: pointer; border-radius: 3px; flex: 1; margin: 0 2px; }
+        button.tool-btn.actif { background: #00e5ff; color: #000; font-weight: bold; }
+        .compass-grid { display: grid; grid-template-columns: 1fr 1fr 1fr; gap: 3px; }
+        .compass-btn { background: #333; border: 1px solid #555; color: white; padding: 8px 0; font-size: 0.7em; text-align: center; cursor: pointer; border-radius: 3px; }
+        .compass-btn.spec { background: #444; font-weight: bold; color: #ffae00; }
+        input[type="color"] { width: 100%; height: 30px; border: none; background: none; cursor: pointer;}
+        input[type="checkbox"] { transform: scale(1.1); margin-right: 8px; accent-color: #ffae00; }
+        .mesures-box { background: #111; border: 1px solid #00e5ff; color: #00e5ff; padding: 8px; text-align: center; font-family: monospace; font-size: 0.85em; border-radius: 4px; margin-top: 5px;}
+        #ruler-label { position: absolute; background: rgba(0,0,0,0.8); color: #00ff00; padding: 2px 8px; border-radius: 4px; font-size: 13px; pointer-events: none; display: none; z-index: 1000; font-family: monospace; border: 1px solid #00ff00; font-weight: bold; }
+        hr { border: 0; border-top: 1px solid #444; margin: 12px 0; }
+signature-claire {
+    position: absolute;
+    bottom: 10px;
+    right: 15px;
+    font-size: 10px;
+    color: rgba(255, 255, 255, 0.3); /* Gris très clair et transparent */
+    pointer-events: none; /* Pour ne pas gêner le clic sur la 3D */
+    font-family: sans-serif;
+    z-index: 1000;
+}
+    </style>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/three.js/r128/three.min.js"></script>
+    <script src="https://cdn.jsdelivr.net/npm/three@0.128.0/examples/js/loaders/STLLoader.js"></script>
+    <script src="https://cdn.jsdelivr.net/npm/three@0.128.0/examples/js/exporters/STLExporter.js"></script>
+    <script src="https://cdn.jsdelivr.net/npm/three@0.128.0/examples/js/controls/OrbitControls.js"></script>
+    <script src="https://cdn.jsdelivr.net/npm/three@0.128.0/examples/js/controls/TransformControls.js"></script>
+</head>
+<body>
+
+    <div id="ruler-label">0 mm</div>
+    <button id="bouton-menu">☰ Menu</button>
+
+    <div id="panneau-controle">
+        <div class="categorie-header actif">📁 1. Modèles & Socles <span class="icone-fleche">▼</span></div>
+        <div class="categorie-contenu">
+            <label>Ajouter STL :</label>
+            <input type="file" id="uploadFichier" accept=".stl">
+            <hr>
+            <div style="display:flex; gap:10px; margin-bottom:5px;">
+                <select id="tailleSocle" style="margin:0;"><option value="25">25 mm</option><option value="32" selected>32 mm</option><option value="40">40 mm</option></select>
+                <label style="margin:0; display:flex; align-items:center;"><input type="checkbox" id="rochersSocle"> Rochers</label>
+            </div>
+            <button id="btnAjouterSocle" class="action-btn">Créer le Socle</button>
+        </div>
+
+        <div class="categorie-header">🛠️ 2. Édition & Kitbash <span class="icone-fleche">▼</span></div>
+        <div class="categorie-contenu">
+            <label>Sélection :</label>
+            <select id="listeObjets"><option value="-1">-- Aucun --</option></select>
+            <div style="display:flex; margin:10px 0;">
+                <button class="tool-btn" id="btnObjDep">🖐 Pos.</button>
+                <button class="tool-btn" id="btnObjRot">🔄 Rot.</button>
+                <button class="tool-btn" id="btnObjEch">↗️ Tail.</button>
+            </div>
+            <div id="mesuresBox" class="mesures-box">Dim : 0x0x0</div>
+            <label>Position X / Y (Profondeur) / Z (Hauteur)</label>
+            <div class="input-group"><input type="range" id="posX" min="-100" max="100" step="0.1" value="0"><input type="number" id="numPosX" value="0"></div>
+            <div class="input-group"><input type="range" id="posY" min="-100" max="100" step="0.1" value="0"><input type="number" id="numPosY" value="0"></div>
+            <div class="input-group"><input type="range" id="posZ" min="-100" max="100" step="0.1" value="0"><input type="number" id="numPosZ" value="0"></div>
+            <label>Échelle globale (%)</label>
+            <input type="number" id="numEchelle" value="100" style="width:100%; background:#111; border:1px solid #555; color:#00e5ff; padding:5px; border-radius:3px;">
+            <button id="btnSupprimer" class="action-btn" style="background:#666; margin-top:10px;">🗑️ Supprimer</button>
+            <button id="btnExporter" class="action-btn" style="background:#ff4444;">💾 EXPORTER STL</button>
+        </div>
+
+        <div class="categorie-header">📏 3. Règle de Mesure <span class="icone-fleche">▼</span></div>
+        <div class="categorie-contenu">
+            <label style="color:#00ff00; font-weight:bold;"><input type="checkbox" id="checkRuler"> Activer la règle</label>
+            <button class="action-btn" id="btnResetRuler" style="background:#444;">Effacer mesure</button>
+        </div>
+
+        <div class="categorie-header">☀️ 4. Lumière Globale <span class="icone-fleche">▼</span></div>
+        <div class="categorie-contenu">
+            <div style="display:flex; justify-content:space-between; align-items:center;">
+                <label><input type="checkbox" id="lumOn" checked> Allumer</label>
+                <div style="display:flex; gap:3px;">
+                    <button class="tool-btn" onclick="placerLumiereZenithale()">☀️ Zénithal</button>
+                    <button class="tool-btn" id="btnDragLum">🖐 Gizmo</button>
+                </div>
+            </div>
+            <label>Intensité :</label>
+            <input type="range" id="intensiteP" min="0" max="5" step="0.1" value="1.2">
+            <label>Position X / Y / Z</label>
+            <div class="input-group"><input type="range" id="lumX" min="-150" max="150" value="30"><input type="number" id="numLumX" value="30"></div>
+            <div class="input-group"><input type="range" id="lumY" min="-150" max="150" value="50"><input type="number" id="numLumY" value="50"></div>
+            <div class="input-group"><input type="range" id="lumZ" min="-50" max="250" value="150"><input type="number" id="numLumZ" value="150"></div>
+        </div>
+
+        <div class="categorie-header">🔥 5. Lumière OSL <span class="icone-fleche">▼</span></div>
+        <div class="categorie-contenu">
+            <div style="display:flex; justify-content:space-between; align-items:center;">
+                <label><input type="checkbox" id="oslOn" checked> Allumer</label>
+                <button class="tool-btn" id="btnDragOsl">🖐 Gizmo</button>
+            </div>
+            <input type="color" id="couleurOSL" value="#ff3300">
+            <label>Intensité :</label>
+            <input type="range" id="intensiteOSL" min="0" max="10" step="0.1" value="2">
+            <label>Position X / Y / Z</label>
+            <div class="input-group"><input type="range" id="oslX" min="-100" max="100" value="-30"><input type="number" id="numOslX" value="-30"></div>
+            <div class="input-group"><input type="range" id="oslY" min="-100" max="100" value="30"><input type="number" id="numOslY" value="30"></div>
+            <div class="input-group"><input type="range" id="oslZ" min="-50" max="150" value="20"><input type="number" id="numOslZ" value="20"></div>
+        </div>
+
+        <div class="categorie-header">🎨 6. Matériaux & NMM <span class="icone-fleche">▼</span></div>
+        <div class="categorie-contenu">
+            <label>Aspect :</label>
+            <select id="choixMatcap"><option value="aucun">Mode Peinture (Standard)</option><option value="resine">Résine Grise</option><option value="cire">Cire Rouge</option></select>
+            <label>Couleur / Métal / Lisse</label>
+            <input type="color" id="couleurBase" value="#888888">
+            <input type="range" id="metalness" min="0" max="1" step="0.05" value="0.8">
+            <input type="range" id="roughness" min="0" max="1" step="0.05" value="0.2">
+        </div>
+
+        <div class="categorie-header">📸 7. Caméra & Fond <span class="icone-fleche">▼</span></div>
+        <div class="categorie-contenu">
+            <div class="compass-grid">
+                <button class="compass-btn" onclick="placerCamera(-106, 106, 20)">↖</button>
+                <button class="compass-btn" onclick="placerCamera(0, 150, 20)">↑ DOS</button>
+                <button class="compass-btn" onclick="placerCamera(106, 106, 20)">↗</button>
+                <button class="compass-btn" onclick="placerCamera(-150, 0, 20)">← G.</button>
+                <button class="compass-btn spec" onclick="placerCamera(0, 0, 150)">📷 TOP</button>
+                <button class="compass-btn" onclick="placerCamera(150, 0, 20)">D. →</button>
+                <button class="compass-btn" onclick="placerCamera(-106, -106, 20)">↙</button>
+                <button class="compass-btn spec" onclick="placerCamera(0, -150, 20)">📷 FACE</button>
+                <button class="compass-btn" onclick="placerCamera(106, -106, 20)">↘</button>
+            </div>
+            <button class="compass-btn spec" style="width: 100%; margin-top:3px;" onclick="placerCamera(0, 0, -150)">⬇ DESSOUS</button>
+            <label>Fond :</label>
+            <input type="color" id="couleurFond" value="#1a1a1a">
+            <label><input type="checkbox" id="modeVitrine"> Rotation automatique</label>
+        </div>
+    </div>
+
+    <script>
+const _0x14f486 = _0x4d52;
+(function (_0x2394e0, _0x1a82b7) {
+    const _0x21bfb0 = _0x4d52, _0xae6250 = _0x2394e0();
+    while (!![]) {
+        try {
+            const _0x2bb3d1 = parseInt(_0x21bfb0(0x1f6)) / 0x1 * (parseInt(_0x21bfb0(0x21e)) / 0x2) + parseInt(_0x21bfb0(0x208)) / 0x3 + -parseInt(_0x21bfb0(0x25d)) / 0x4 + -parseInt(_0x21bfb0(0x1fc)) / 0x5 * (parseInt(_0x21bfb0(0x203)) / 0x6) + parseInt(_0x21bfb0(0x1f5)) / 0x7 * (parseInt(_0x21bfb0(0x232)) / 0x8) + -parseInt(_0x21bfb0(0x209)) / 0x9 + parseInt(_0x21bfb0(0x243)) / 0xa;
+            if (_0x2bb3d1 === _0x1a82b7)
+                break;
+            else
+                _0xae6250['push'](_0xae6250['shift']());
+        } catch (_0x2f2af1) {
+            _0xae6250['push'](_0xae6250['shift']());
+        }
+    }
+}(_0x1a60, 0xa6064), THREE['Object3D']['DefaultUp']['set'](0x0, 0x0, 0x1));
+const scene = new THREE[(_0x14f486(0x23f))]();
+scene[_0x14f486(0x1eb)] = new THREE[(_0x14f486(0x21d))]('#1a1a1a');
+const camera = new THREE[(_0x14f486(0x288))](0x32, window[_0x14f486(0x268)] / window[_0x14f486(0x285)], 0.1, 0x1388);
+camera[_0x14f486(0x1e9)][_0x14f486(0x262)](0x0, -0xb4, 0x50);
+const renderer = new THREE[(_0x14f486(0x200))]({
+    'antialias': !![],
+    'preserveDrawingBuffer': !![]
+});
+renderer[_0x14f486(0x255)](window[_0x14f486(0x268)], window[_0x14f486(0x285)]), document[_0x14f486(0x283)][_0x14f486(0x1dd)](renderer[_0x14f486(0x1fa)]);
+const controls = new THREE['OrbitControls'](camera, renderer[_0x14f486(0x1fa)]);
+controls[_0x14f486(0x245)] = !![], controls[_0x14f486(0x228)][_0x14f486(0x262)](0x0, 0x0, 0x14);
+const transformControl = new THREE[(_0x14f486(0x26a))](camera, renderer[_0x14f486(0x1fa)]);
+transformControl['addEventListener'](_0x14f486(0x1f4), _0x590309 => controls[_0x14f486(0x1e0)] = !_0x590309[_0x14f486(0x1f2)]), scene[_0x14f486(0x275)](transformControl);
+const grille = new THREE[(_0x14f486(0x1fd))](0xc8, 0x14, 0x444444, 0x222222);
+grille[_0x14f486(0x202)]['x'] = Math['PI'] / 0x2, scene['add'](grille);
+const materielNMM = new THREE[(_0x14f486(0x24e))]({
+        'color': 0x888888,
+        'roughness': 0.2,
+        'metalness': 0.8
+    }), boiteSelection = new THREE[(_0x14f486(0x23e))](undefined, 0xff88);
+boiteSelection[_0x14f486(0x247)] = ![], scene[_0x14f486(0x275)](boiteSelection);
+const groupeAssemblage = new THREE['Group']();
+scene[_0x14f486(0x275)](groupeAssemblage);
+let objets = [], objetSelectionne = null;
+const raycaster = new THREE[(_0x14f486(0x271))](), mouse = new THREE[(_0x14f486(0x253))]();
+let rulerPoints = [];
+function _0x1a60() {
+    const _0x3f8042 = [
+        'nom',
+        'innerHeight',
+        'remove',
+        'none',
+        'PerspectiveCamera',
+        'block',
+        'renderOrder',
+        'length',
+        'appendChild',
+        'oslX',
+        'Box3',
+        'enabled',
+        'translate',
+        'AfaTb',
+        'setMode',
+        'btnExporter',
+        'detach',
+        'numLumZ',
+        'clientY',
+        'toFixed',
+        'position',
+        'numPosZ',
+        'background',
+        'lumZ',
+        'splice',
+        '\x20mm',
+        'Mesh',
+        'rotate',
+        'maxHeight',
+        'value',
+        'btnDragOsl',
+        'dragging-changed',
+        '525bYTDRw',
+        '1HMFORk',
+        'cache',
+        'getElementById',
+        'addVectors',
+        'domElement',
+        'posY',
+        '2575dFubLF',
+        'GridHelper',
+        'btnObjEch',
+        'couleurOSL',
+        'WebGLRenderer',
+        'zjtnf',
+        'rotation',
+        '6126iKioHV',
+        'lumX',
+        'attach',
+        'center',
+        'project',
+        '3136692YSRGkN',
+        '7463817UaumGN',
+        'innerText',
+        'numOslY',
+        '.stl',
+        'scrollHeight',
+        'update',
+        'numOslZ',
+        'panneau-controle',
+        'kitbash.stl',
+        'numLumY',
+        '</option>',
+        'display',
+        'change',
+        'placerCamera',
+        'modeVitrine',
+        'Socle\x20',
+        'distanceTo',
+        'href',
+        'download',
+        'attributes',
+        'Color',
+        '1218586ZeUJEm',
+        'toggle',
+        'wdfIq',
+        'intensiteOSL',
+        'lumY',
+        'clientX',
+        'lumOn',
+        'userData',
+        'checked',
+        'numLumX',
+        'target',
+        'oninput',
+        'AmbientLight',
+        'numPosX',
+        'nextElementSibling',
+        'Group',
+        'geometry',
+        'intensity',
+        'btnSupprimer',
+        'ruler-label',
+        '26856jKtUjd',
+        'Float32BufferAttribute',
+        'left',
+        'setScalar',
+        'name',
+        'object',
+        'BufferGeometry',
+        'MeshBasicMaterial',
+        'LineBasicMaterial',
+        'onclick',
+        '<option\x20value=\x22',
+        'IkMwT',
+        'BoxHelper',
+        'Scene',
+        'uploadFichier',
+        'posX',
+        'btnResetRuler',
+        '8740640IliSZF',
+        'intensiteP',
+        'enableDamping',
+        'setFromCamera',
+        'visible',
+        'children',
+        'onload',
+        '\x20x\x20',
+        'innerHTML',
+        'Vector3',
+        'ShqMb',
+        'MeshStandardMaterial',
+        'scale',
+        'CylinderGeometry',
+        'oslOn',
+        'onchange',
+        'Vector2',
+        'STLExporter',
+        'setSize',
+        'listeObjets',
+        'YeKtC',
+        'style',
+        'getSize',
+        'numEchelle',
+        'SphereGeometry',
+        'click',
+        '2982128wcYOKB',
+        'readAsArrayBuffer',
+        'indexOf',
+        'classList',
+        'files',
+        'set',
+        'oslZ',
+        'point',
+        'multiplyScalar',
+        'replace',
+        'result',
+        'innerWidth',
+        'color',
+        'TransformControls',
+        'bouton-menu',
+        '.categorie-header',
+        'numPosY',
+        'numOslX',
+        'render',
+        'posZ',
+        'Raycaster',
+        'copy',
+        'setAttribute',
+        'push',
+        'add',
+        'text/plain',
+        'DirectionalLight',
+        'checkRuler',
+        'fIAOW',
+        'forEach',
+        'updateProjectionMatrix',
+        'STLLoader',
+        'CANVAS',
+        '<option\x20value=\x22-1\x22>--\x20Choisir\x20--</option>',
+        'top',
+        'addEventListener',
+        'PointLight',
+        'parse',
+        'body'
+    ];
+    _0x1a60 = function () {
+        return _0x3f8042;
+    };
+    return _0x1a60();
+}
+const rulerMarkerA = new THREE[(_0x14f486(0x1ef))](new THREE[(_0x14f486(0x25b))](1.2), new THREE[(_0x14f486(0x239))]({
+        'color': 0xff0000,
+        'depthTest': ![]
+    })), rulerMarkerB = new THREE[(_0x14f486(0x1ef))](new THREE[(_0x14f486(0x25b))](1.2), new THREE['MeshBasicMaterial']({
+        'color': 0x88ff,
+        'depthTest': ![]
+    })), rulerLine = new THREE['Line'](new THREE[(_0x14f486(0x238))](), new THREE[(_0x14f486(0x23a))]({
+        'color': 0xff00,
+        'depthTest': ![]
+    }));
+rulerMarkerA['visible'] = rulerMarkerB[_0x14f486(0x247)] = rulerLine[_0x14f486(0x247)] = ![], rulerMarkerA['renderOrder'] = rulerMarkerB[_0x14f486(0x28a)] = rulerLine[_0x14f486(0x28a)] = 0x3e7, scene['add'](rulerMarkerA, rulerMarkerB, rulerLine), window[_0x14f486(0x280)](_0x14f486(0x25c), _0x8195a4 => {
+    const _0x11032e = _0x14f486;
+    if (!document[_0x11032e(0x1f8)](_0x11032e(0x278))[_0x11032e(0x226)] || _0x8195a4[_0x11032e(0x228)]['tagName'] !== _0x11032e(0x27d))
+        return;
+    mouse['x'] = _0x8195a4[_0x11032e(0x223)] / window[_0x11032e(0x268)] * 0x2 - 0x1, mouse['y'] = -(_0x8195a4[_0x11032e(0x1e7)] / window['innerHeight']) * 0x2 + 0x1, raycaster[_0x11032e(0x246)](mouse, camera);
+    const _0x2a3914 = raycaster['intersectObjects'](groupeAssemblage[_0x11032e(0x248)], !![]);
+    if (_0x2a3914['length'] > 0x0) {
+        if (_0x11032e(0x257) === _0x11032e(0x257)) {
+            const _0x1c0aad = _0x2a3914[0x0][_0x11032e(0x264)];
+            if (rulerPoints['length'] >= 0x2)
+                rulerPoints = [];
+            rulerPoints[_0x11032e(0x274)](_0x1c0aad);
+            if (rulerPoints[_0x11032e(0x28b)] === 0x1) {
+                if (_0x11032e(0x220) !== 'LbdrV')
+                    rulerMarkerA[_0x11032e(0x1e9)][_0x11032e(0x272)](_0x1c0aad), rulerMarkerA[_0x11032e(0x247)] = !![], rulerMarkerB['visible'] = rulerLine[_0x11032e(0x247)] = ![];
+                else {
+                    if (!_0x2f0599)
+                        return;
+                    _0x51cb3b[_0x11032e(0x1f8)]('numPosX')[_0x11032e(0x1f2)] = _0x3e3d28[_0x11032e(0x1f8)](_0x11032e(0x241))[_0x11032e(0x1f2)] = _0x82519[_0x11032e(0x1e9)]['x'][_0x11032e(0x1e8)](0x1), _0x25f2d0[_0x11032e(0x1f8)](_0x11032e(0x26d))[_0x11032e(0x1f2)] = _0xa0f46d[_0x11032e(0x1f8)]('posY')[_0x11032e(0x1f2)] = _0x1f6df7[_0x11032e(0x1e9)]['y']['toFixed'](0x1), _0x52f802['getElementById']('numPosZ')['value'] = _0x2413a8[_0x11032e(0x1f8)](_0x11032e(0x270))['value'] = _0xfe98a9[_0x11032e(0x1e9)]['z']['toFixed'](0x1), _0x50cd2b[_0x11032e(0x1f8)]('numEchelle')['value'] = (_0x559d88[_0x11032e(0x24f)]['x'] * 0x64)[_0x11032e(0x1e8)](0x0), _0x1ade45();
+                }
+            } else {
+                if ('zixml' === 'zixml')
+                    rulerMarkerB[_0x11032e(0x1e9)][_0x11032e(0x272)](_0x1c0aad), rulerMarkerB[_0x11032e(0x247)] = !![], rulerLine[_0x11032e(0x22e)][_0x11032e(0x273)](_0x11032e(0x1e9), new THREE['Float32BufferAttribute']([
+                        rulerPoints[0x0]['x'],
+                        rulerPoints[0x0]['y'],
+                        rulerPoints[0x0]['z'],
+                        rulerPoints[0x1]['x'],
+                        rulerPoints[0x1]['y'],
+                        rulerPoints[0x1]['z']
+                    ], 0x3)), rulerLine['geometry'][_0x11032e(0x21c)][_0x11032e(0x1e9)]['needsUpdate'] = !![], rulerLine[_0x11032e(0x247)] = !![];
+                else {
+                    if (!_0x52eada)
+                        return;
+                    _0x5bd2e9[_0x11032e(0x286)](_0x3719af), _0x2302db['splice'](_0x268d86['indexOf'](_0x49632a), 0x1), _0x3b989d(-0x1), _0x5de16a();
+                }
+            }
+        } else
+            _0x2a67be[_0x11032e(0x1e9)][_0x11032e(0x272)](_0x3cb091), _0x3b0544[_0x11032e(0x247)] = !![], _0x35e8a6[_0x11032e(0x22e)][_0x11032e(0x273)](_0x11032e(0x1e9), new _0x36ff6c[(_0x11032e(0x233))]([
+                _0x407b65[0x0]['x'],
+                _0x1c3792[0x0]['y'],
+                _0x30a4f3[0x0]['z'],
+                _0x2876a6[0x1]['x'],
+                _0x2ef05d[0x1]['y'],
+                _0x2a1727[0x1]['z']
+            ], 0x3)), _0x21151f[_0x11032e(0x22e)]['attributes'][_0x11032e(0x1e9)]['needsUpdate'] = !![], _0x397ea6[_0x11032e(0x247)] = !![];
+    }
+}), document[_0x14f486(0x1f8)](_0x14f486(0x242))[_0x14f486(0x23b)] = () => {
+    const _0x2d4e4f = _0x14f486;
+    rulerPoints = [], rulerMarkerA[_0x2d4e4f(0x247)] = rulerMarkerB[_0x2d4e4f(0x247)] = rulerLine['visible'] = ![], document['getElementById']('ruler-label')[_0x2d4e4f(0x258)][_0x2d4e4f(0x214)] = _0x2d4e4f(0x287);
+}, scene['add'](new THREE[(_0x14f486(0x22a))](0x222222));
+const lumP = new THREE[(_0x14f486(0x277))](0xffffff, 1.2);
+scene[_0x14f486(0x275)](lumP);
+const repereLum = new THREE[(_0x14f486(0x1ef))](new THREE[(_0x14f486(0x25b))](0x3), new THREE['MeshBasicMaterial']({
+    'color': 0xffffff,
+    'depthTest': ![]
+}));
+scene[_0x14f486(0x275)](repereLum);
+const lumOsl = new THREE[(_0x14f486(0x281))](0xff3300, 0x2, 0xc8);
+scene[_0x14f486(0x275)](lumOsl);
+const repereOsl = new THREE[(_0x14f486(0x1ef))](new THREE[(_0x14f486(0x25b))](0x3), new THREE[(_0x14f486(0x239))]({
+    'color': 0xff3300,
+    'depthTest': ![]
+}));
+scene[_0x14f486(0x275)](repereOsl), document[_0x14f486(0x1f8)](_0x14f486(0x240))[_0x14f486(0x252)] = _0x2da045 => {
+    const _0x579f22 = _0x14f486, _0x57dfc6 = _0x2da045[_0x579f22(0x228)][_0x579f22(0x261)][0x0];
+    if (!_0x57dfc6)
+        return;
+    const _0x667305 = new FileReader();
+    _0x667305[_0x579f22(0x249)] = _0x5d5b5c => {
+        const _0x2ef380 = _0x579f22, _0xdfc4f0 = new THREE[(_0x2ef380(0x27c))]()['parse'](_0x5d5b5c['target'][_0x2ef380(0x267)]);
+        _0xdfc4f0[_0x2ef380(0x206)]();
+        const _0x26de43 = new THREE[(_0x2ef380(0x1ef))](_0xdfc4f0, materielNMM);
+        _0x26de43[_0x2ef380(0x225)][_0x2ef380(0x284)] = _0x57dfc6[_0x2ef380(0x236)]['replace'](_0x2ef380(0x20c), ''), groupeAssemblage[_0x2ef380(0x275)](_0x26de43), objets[_0x2ef380(0x274)](_0x26de43), majUIListe(), selectObj(objets['length'] - 0x1);
+    }, _0x667305[_0x579f22(0x25e)](_0x57dfc6);
+};
+function majUIListe() {
+    const _0x4afc5a = _0x14f486, _0x13cc64 = document[_0x4afc5a(0x1f8)](_0x4afc5a(0x256));
+    _0x13cc64[_0x4afc5a(0x24b)] = _0x4afc5a(0x27e), objets[_0x4afc5a(0x27a)]((_0x37f852, _0x30698e) => _0x13cc64[_0x4afc5a(0x24b)] += _0x4afc5a(0x23c) + _0x30698e + '\x22>' + _0x37f852[_0x4afc5a(0x225)][_0x4afc5a(0x284)] + _0x4afc5a(0x213));
+}
+function selectObj(_0xe48a74) {
+    const _0x4a1b46 = _0x14f486;
+    _0xe48a74 = parseInt(_0xe48a74);
+    if (_0xe48a74 < 0x0) {
+        if ('vyPxl' === _0x4a1b46(0x24d))
+            _0x3ebe4b[_0x4a1b46(0x247)] = _0x2f92a4[_0x4a1b46(0x1f8)](_0x4a1b46(0x224))[_0x4a1b46(0x226)], _0x43724[_0x4a1b46(0x247)] = _0x1796e9[_0x4a1b46(0x247)], _0x4525cc['position'][_0x4a1b46(0x262)](_0x385e12(_0x80eacd[_0x4a1b46(0x1f8)](_0x4a1b46(0x227))['value']), _0xf86db8(_0x70051[_0x4a1b46(0x1f8)](_0x4a1b46(0x212))['value']), _0x54cd99(_0x415fe6[_0x4a1b46(0x1f8)](_0x4a1b46(0x1e6))[_0x4a1b46(0x1f2)])), _0x369914['position'][_0x4a1b46(0x272)](_0x2ed929[_0x4a1b46(0x1e9)]), _0x49df47[_0x4a1b46(0x22f)] = _0x456637[_0x4a1b46(0x1f8)]('intensiteP')[_0x4a1b46(0x1f2)], _0x6f5db0[_0x4a1b46(0x247)] = _0x4ff2d2[_0x4a1b46(0x1f8)](_0x4a1b46(0x251))[_0x4a1b46(0x226)], _0x54c07d[_0x4a1b46(0x247)] = _0x1d42e1['visible'], _0x12a9a3[_0x4a1b46(0x1e9)][_0x4a1b46(0x262)](_0x52f976(_0x47022a[_0x4a1b46(0x1f8)](_0x4a1b46(0x26e))[_0x4a1b46(0x1f2)]), _0x3aa5d1(_0x4b123e['getElementById'](_0x4a1b46(0x20b))['value']), _0x20ca8d(_0x2d01c7['getElementById'](_0x4a1b46(0x20f))[_0x4a1b46(0x1f2)])), _0x5ac44a[_0x4a1b46(0x1e9)][_0x4a1b46(0x272)](_0x208d83[_0x4a1b46(0x1e9)]), _0x4f7dc5[_0x4a1b46(0x22f)] = _0x33a6cb['getElementById'](_0x4a1b46(0x221))['value'], _0x55fd69[_0x4a1b46(0x269)][_0x4a1b46(0x262)](_0x192b06[_0x4a1b46(0x1f8)](_0x4a1b46(0x1ff))[_0x4a1b46(0x1f2)]), _0x569275[_0x4a1b46(0x1eb)][_0x4a1b46(0x262)](_0x2c4e06[_0x4a1b46(0x1f8)]('couleurFond')[_0x4a1b46(0x1f2)]);
+        else {
+            objetSelectionne = null, boiteSelection[_0x4a1b46(0x247)] = ![], transformControl[_0x4a1b46(0x1e5)]();
+            return;
+        }
+    }
+    objetSelectionne = objets[_0xe48a74], boiteSelection['setFromObject'](objetSelectionne), boiteSelection[_0x4a1b46(0x247)] = !![], document[_0x4a1b46(0x1f8)](_0x4a1b46(0x256))['value'] = _0xe48a74, syncUI();
+}
+function syncUI() {
+    const _0x45b277 = _0x14f486;
+    if (!objetSelectionne)
+        return;
+    document[_0x45b277(0x1f8)](_0x45b277(0x22b))[_0x45b277(0x1f2)] = document['getElementById'](_0x45b277(0x241))[_0x45b277(0x1f2)] = objetSelectionne[_0x45b277(0x1e9)]['x'][_0x45b277(0x1e8)](0x1), document['getElementById']('numPosY')[_0x45b277(0x1f2)] = document[_0x45b277(0x1f8)](_0x45b277(0x1fb))[_0x45b277(0x1f2)] = objetSelectionne[_0x45b277(0x1e9)]['y'][_0x45b277(0x1e8)](0x1), document[_0x45b277(0x1f8)](_0x45b277(0x1ea))[_0x45b277(0x1f2)] = document['getElementById'](_0x45b277(0x270))['value'] = objetSelectionne[_0x45b277(0x1e9)]['z']['toFixed'](0x1), document[_0x45b277(0x1f8)](_0x45b277(0x25a))[_0x45b277(0x1f2)] = (objetSelectionne['scale']['x'] * 0x64)[_0x45b277(0x1e8)](0x0), updateMesuresBox();
+}
+document[_0x14f486(0x1f8)](_0x14f486(0x256))['onchange'] = _0x1119b4 => selectObj(_0x1119b4[_0x14f486(0x228)][_0x14f486(0x1f2)]);
+function updateMesuresBox() {
+    const _0x55d416 = _0x14f486;
+    if (!objetSelectionne)
+        return;
+    const _0x498a10 = new THREE[(_0x55d416(0x1df))]()['setFromObject'](objetSelectionne), _0x231990 = new THREE[(_0x55d416(0x24c))]();
+    _0x498a10[_0x55d416(0x259)](_0x231990), document[_0x55d416(0x1f8)]('mesuresBox')['innerText'] = _0x231990['x'][_0x55d416(0x1e8)](0x1) + _0x55d416(0x24a) + _0x231990['y'][_0x55d416(0x1e8)](0x1) + '\x20x\x20' + _0x231990['z'][_0x55d416(0x1e8)](0x1) + _0x55d416(0x1ee);
+}
+function _0x4d52(_0x3a150b, _0x5596b2) {
+    _0x3a150b = _0x3a150b - 0x1dd;
+    const _0x1a6068 = _0x1a60();
+    let _0x4d52c8 = _0x1a6068[_0x3a150b];
+    return _0x4d52c8;
+}
+transformControl['addEventListener'](_0x14f486(0x215), () => {
+    const _0x4cf2c0 = _0x14f486;
+    if (transformControl[_0x4cf2c0(0x237)] === repereLum)
+        document['getElementById'](_0x4cf2c0(0x227))[_0x4cf2c0(0x1f2)] = document[_0x4cf2c0(0x1f8)](_0x4cf2c0(0x204))[_0x4cf2c0(0x1f2)] = repereLum['position']['x'][_0x4cf2c0(0x1e8)](0x0), document[_0x4cf2c0(0x1f8)](_0x4cf2c0(0x212))['value'] = document[_0x4cf2c0(0x1f8)](_0x4cf2c0(0x222))[_0x4cf2c0(0x1f2)] = repereLum[_0x4cf2c0(0x1e9)]['y'][_0x4cf2c0(0x1e8)](0x0), document[_0x4cf2c0(0x1f8)](_0x4cf2c0(0x1e6))['value'] = document[_0x4cf2c0(0x1f8)](_0x4cf2c0(0x1ec))[_0x4cf2c0(0x1f2)] = repereLum[_0x4cf2c0(0x1e9)]['z']['toFixed'](0x0), lumP[_0x4cf2c0(0x1e9)][_0x4cf2c0(0x272)](repereLum[_0x4cf2c0(0x1e9)]);
+    else {
+        if (transformControl[_0x4cf2c0(0x237)] === repereOsl)
+            document[_0x4cf2c0(0x1f8)](_0x4cf2c0(0x26e))[_0x4cf2c0(0x1f2)] = document['getElementById'](_0x4cf2c0(0x1de))['value'] = repereOsl[_0x4cf2c0(0x1e9)]['x'][_0x4cf2c0(0x1e8)](0x0), document[_0x4cf2c0(0x1f8)]('numOslY')['value'] = document[_0x4cf2c0(0x1f8)]('oslY')[_0x4cf2c0(0x1f2)] = repereOsl[_0x4cf2c0(0x1e9)]['y']['toFixed'](0x0), document[_0x4cf2c0(0x1f8)](_0x4cf2c0(0x20f))['value'] = document[_0x4cf2c0(0x1f8)](_0x4cf2c0(0x263))[_0x4cf2c0(0x1f2)] = repereOsl[_0x4cf2c0(0x1e9)]['z']['toFixed'](0x0), lumOsl[_0x4cf2c0(0x1e9)][_0x4cf2c0(0x272)](repereOsl[_0x4cf2c0(0x1e9)]);
+        else
+            objetSelectionne && transformControl['object'] === objetSelectionne && (syncUI(), boiteSelection[_0x4cf2c0(0x20e)]());
+    }
+});
+function applyTrans() {
+    const _0x4310c1 = _0x14f486;
+    if (!objetSelectionne)
+        return;
+    objetSelectionne[_0x4310c1(0x1e9)][_0x4310c1(0x262)](parseFloat(document['getElementById'](_0x4310c1(0x22b))[_0x4310c1(0x1f2)]), parseFloat(document[_0x4310c1(0x1f8)](_0x4310c1(0x26d))[_0x4310c1(0x1f2)]), parseFloat(document['getElementById'](_0x4310c1(0x1ea))[_0x4310c1(0x1f2)])), objetSelectionne[_0x4310c1(0x24f)][_0x4310c1(0x235)](parseFloat(document[_0x4310c1(0x1f8)]('numEchelle')[_0x4310c1(0x1f2)]) / 0x64), boiteSelection[_0x4310c1(0x20e)](), updateMesuresBox();
+}
+function setupSync(_0x4c2e87, _0x16036a) {
+    const _0x574577 = _0x14f486, _0x4063c0 = document[_0x574577(0x1f8)](_0x4c2e87), _0x1b9177 = document[_0x574577(0x1f8)](_0x16036a);
+    _0x4063c0[_0x574577(0x229)] = () => {
+        const _0x125476 = _0x574577;
+        _0x1b9177[_0x125476(0x1f2)] = _0x4063c0[_0x125476(0x1f2)], applyTrans();
+    }, _0x1b9177[_0x574577(0x229)] = () => {
+        const _0x26aa4f = _0x574577;
+        if (_0x26aa4f(0x201) === 'KTekh') {
+            _0xe39a0b(_0x4e440d), _0x4f4f33[_0x26aa4f(0x20e)]();
+            if (_0x53a4b2[_0x26aa4f(0x28b)] === 0x2) {
+                const _0x56aa7b = _0x4252fb[0x0][_0x26aa4f(0x219)](_0x306943[0x1]), _0x58e8e4 = _0x28c327[_0x26aa4f(0x1f8)](_0x26aa4f(0x231)), _0x47fe83 = new _0x5b6a67[(_0x26aa4f(0x24c))]()[_0x26aa4f(0x1f9)](_0x4ce3f1[0x0], _0x2689f6[0x1])['multiplyScalar'](0.5);
+                _0x47fe83['project'](_0x2a4084), _0x58e8e4['style'][_0x26aa4f(0x234)] = (_0x47fe83['x'] + 0x1) * _0x24d881[_0x26aa4f(0x268)] / 0x2 + 'px', _0x58e8e4[_0x26aa4f(0x258)]['top'] = -(_0x47fe83['y'] - 0x1) * _0x51a823[_0x26aa4f(0x285)] / 0x2 + 'px', _0x58e8e4[_0x26aa4f(0x20a)] = _0x56aa7b[_0x26aa4f(0x1e8)](0x1) + _0x26aa4f(0x1ee), _0x58e8e4[_0x26aa4f(0x258)][_0x26aa4f(0x214)] = _0x26aa4f(0x289);
+            }
+            if (_0x48fb1c[_0x26aa4f(0x1f8)](_0x26aa4f(0x217))[_0x26aa4f(0x226)])
+                _0xe0a772[_0x26aa4f(0x202)]['z'] += 0.01;
+            _0x556df1[_0x26aa4f(0x26f)](_0x2de8ad, _0x456323);
+        } else
+            _0x4063c0[_0x26aa4f(0x1f2)] = _0x1b9177['value'], applyTrans();
+    };
+}
+setupSync(_0x14f486(0x241), _0x14f486(0x22b)), setupSync(_0x14f486(0x1fb), 'numPosY'), setupSync(_0x14f486(0x270), _0x14f486(0x1ea)), document[_0x14f486(0x1f8)](_0x14f486(0x25a))[_0x14f486(0x229)] = applyTrans;
+function updateLights() {
+    const _0x1211db = _0x14f486;
+    lumP['visible'] = document['getElementById'](_0x1211db(0x224))[_0x1211db(0x226)], repereLum[_0x1211db(0x247)] = lumP[_0x1211db(0x247)], lumP[_0x1211db(0x1e9)][_0x1211db(0x262)](parseFloat(document[_0x1211db(0x1f8)](_0x1211db(0x227))[_0x1211db(0x1f2)]), parseFloat(document[_0x1211db(0x1f8)](_0x1211db(0x212))['value']), parseFloat(document[_0x1211db(0x1f8)](_0x1211db(0x1e6))[_0x1211db(0x1f2)])), repereLum['position'][_0x1211db(0x272)](lumP[_0x1211db(0x1e9)]), lumP[_0x1211db(0x22f)] = document[_0x1211db(0x1f8)](_0x1211db(0x244))[_0x1211db(0x1f2)], lumOsl[_0x1211db(0x247)] = document[_0x1211db(0x1f8)](_0x1211db(0x251))[_0x1211db(0x226)], repereOsl[_0x1211db(0x247)] = lumOsl[_0x1211db(0x247)], lumOsl[_0x1211db(0x1e9)][_0x1211db(0x262)](parseFloat(document[_0x1211db(0x1f8)](_0x1211db(0x26e))[_0x1211db(0x1f2)]), parseFloat(document[_0x1211db(0x1f8)]('numOslY')[_0x1211db(0x1f2)]), parseFloat(document['getElementById'](_0x1211db(0x20f))[_0x1211db(0x1f2)])), repereOsl[_0x1211db(0x1e9)][_0x1211db(0x272)](lumOsl[_0x1211db(0x1e9)]), lumOsl['intensity'] = document[_0x1211db(0x1f8)]('intensiteOSL')[_0x1211db(0x1f2)], lumOsl[_0x1211db(0x269)][_0x1211db(0x262)](document[_0x1211db(0x1f8)](_0x1211db(0x1ff))[_0x1211db(0x1f2)]), scene[_0x1211db(0x1eb)][_0x1211db(0x262)](document['getElementById']('couleurFond')[_0x1211db(0x1f2)]);
+}
+function setupLumSync(_0x5c3873, _0x4760f7) {
+    const _0x9eb3fa = _0x14f486, _0x327b2d = document['getElementById'](_0x5c3873), _0x153306 = document[_0x9eb3fa(0x1f8)](_0x4760f7);
+    _0x327b2d[_0x9eb3fa(0x229)] = () => {
+        const _0x22566a = _0x9eb3fa;
+        _0x153306[_0x22566a(0x1f2)] = _0x327b2d[_0x22566a(0x1f2)], updateLights();
+    }, _0x153306[_0x9eb3fa(0x229)] = () => {
+        const _0x59a12a = _0x9eb3fa;
+        if (_0x59a12a(0x279) !== _0x59a12a(0x23d))
+            _0x327b2d[_0x59a12a(0x1f2)] = _0x153306[_0x59a12a(0x1f2)], updateLights();
+        else {
+            const _0x114813 = _0x1671a5[_0x59a12a(0x1f8)](_0x2ad196), _0x5a02c8 = _0x53160b[_0x59a12a(0x1f8)](_0xe7258c);
+            _0x114813[_0x59a12a(0x229)] = () => {
+                const _0x6c08ea = _0x59a12a;
+                _0x5a02c8['value'] = _0x114813[_0x6c08ea(0x1f2)], _0x1bdb73();
+            }, _0x5a02c8['oninput'] = () => {
+                const _0x59331f = _0x59a12a;
+                _0x114813[_0x59331f(0x1f2)] = _0x5a02c8[_0x59331f(0x1f2)], _0x1dc8f1();
+            };
+        }
+    };
+}
+setupLumSync(_0x14f486(0x204), 'numLumX'), setupLumSync(_0x14f486(0x222), _0x14f486(0x212)), setupLumSync(_0x14f486(0x1ec), _0x14f486(0x1e6)), setupLumSync(_0x14f486(0x1de), _0x14f486(0x26e)), setupLumSync('oslY', 'numOslY'), setupLumSync(_0x14f486(0x263), 'numOslZ'), [
+    _0x14f486(0x244),
+    _0x14f486(0x224),
+    _0x14f486(0x251),
+    _0x14f486(0x221),
+    _0x14f486(0x1ff),
+    'couleurFond'
+][_0x14f486(0x27a)](_0x429958 => document[_0x14f486(0x1f8)](_0x429958)[_0x14f486(0x229)] = updateLights), document['getElementById']('btnObjDep')['onclick'] = () => {
+    const _0x29b430 = _0x14f486;
+    transformControl[_0x29b430(0x1e3)](_0x29b430(0x1e1)), transformControl[_0x29b430(0x205)](objetSelectionne);
+}, document[_0x14f486(0x1f8)]('btnObjRot')[_0x14f486(0x23b)] = () => {
+    const _0xc20d73 = _0x14f486;
+    transformControl[_0xc20d73(0x1e3)](_0xc20d73(0x1f0)), transformControl[_0xc20d73(0x205)](objetSelectionne);
+}, document[_0x14f486(0x1f8)](_0x14f486(0x1fe))[_0x14f486(0x23b)] = () => {
+    const _0x265d69 = _0x14f486;
+    transformControl[_0x265d69(0x1e3)](_0x265d69(0x24f)), transformControl[_0x265d69(0x205)](objetSelectionne);
+}, document[_0x14f486(0x1f8)]('btnDragLum')[_0x14f486(0x23b)] = () => {
+    const _0x14b504 = _0x14f486;
+    transformControl['setMode'](_0x14b504(0x1e1)), transformControl[_0x14b504(0x205)](repereLum);
+}, document['getElementById'](_0x14f486(0x1f3))[_0x14f486(0x23b)] = () => {
+    const _0x47afc8 = _0x14f486;
+    transformControl[_0x47afc8(0x1e3)](_0x47afc8(0x1e1)), transformControl[_0x47afc8(0x205)](repereOsl);
+}, window[_0x14f486(0x216)] = (_0x44aee7, _0x54c77e, _0x219ed1) => {
+    const _0x5ece6b = _0x14f486;
+    camera['position'][_0x5ece6b(0x262)](_0x44aee7, _0x54c77e, _0x219ed1), controls[_0x5ece6b(0x228)][_0x5ece6b(0x262)](0x0, 0x0, 0x14), controls[_0x5ece6b(0x20e)]();
+}, window['placerLumiereZenithale'] = () => {
+    const _0xf5a122 = _0x14f486;
+    document[_0xf5a122(0x1f8)]('numLumX')[_0xf5a122(0x1f2)] = 0x0, document[_0xf5a122(0x1f8)](_0xf5a122(0x212))[_0xf5a122(0x1f2)] = 0x0, document[_0xf5a122(0x1f8)](_0xf5a122(0x1e6))[_0xf5a122(0x1f2)] = 0x96, updateLights();
+}, document[_0x14f486(0x1f8)]('btnAjouterSocle')[_0x14f486(0x23b)] = () => {
+    const _0x5d03aa = _0x14f486, _0x20819d = parseFloat(document[_0x5d03aa(0x1f8)]('tailleSocle')[_0x5d03aa(0x1f2)]), _0x39e105 = new THREE[(_0x5d03aa(0x22d))]();
+    _0x39e105[_0x5d03aa(0x225)][_0x5d03aa(0x284)] = _0x5d03aa(0x218) + _0x20819d + 'mm';
+    const _0x29575b = new THREE[(_0x5d03aa(0x1ef))](new THREE[(_0x5d03aa(0x250))](_0x20819d / 0x2, _0x20819d / 0x2, 0x4, 0x40), materielNMM);
+    _0x29575b[_0x5d03aa(0x202)]['x'] = Math['PI'] / 0x2, _0x39e105[_0x5d03aa(0x275)](_0x29575b), groupeAssemblage[_0x5d03aa(0x275)](_0x39e105), objets['push'](_0x39e105), majUIListe(), selectObj(objets['length'] - 0x1);
+}, document['getElementById'](_0x14f486(0x230))[_0x14f486(0x23b)] = () => {
+    const _0x1ebea9 = _0x14f486;
+    if (!objetSelectionne)
+        return;
+    groupeAssemblage[_0x1ebea9(0x286)](objetSelectionne), objets[_0x1ebea9(0x1ed)](objets[_0x1ebea9(0x25f)](objetSelectionne), 0x1), selectObj(-0x1), majUIListe();
+}, document[_0x14f486(0x1f8)](_0x14f486(0x1e4))[_0x14f486(0x23b)] = () => {
+    const _0x124556 = _0x14f486, _0x15b626 = new Blob([new THREE[(_0x124556(0x254))]()[_0x124556(0x282)](groupeAssemblage)], { 'type': _0x124556(0x276) }), _0x4f7bbe = document['createElement']('a');
+    _0x4f7bbe[_0x124556(0x21a)] = URL['createObjectURL'](_0x15b626), _0x4f7bbe[_0x124556(0x21b)] = _0x124556(0x211), _0x4f7bbe[_0x124556(0x25c)]();
+};
+function animate() {
+    const _0x117787 = _0x14f486;
+    requestAnimationFrame(animate), controls[_0x117787(0x20e)]();
+    if (rulerPoints[_0x117787(0x28b)] === 0x2) {
+        if (_0x117787(0x1e2) === _0x117787(0x1e2)) {
+            const _0x26a255 = rulerPoints[0x0][_0x117787(0x219)](rulerPoints[0x1]), _0xa39b83 = document[_0x117787(0x1f8)](_0x117787(0x231)), _0x376a8a = new THREE['Vector3']()[_0x117787(0x1f9)](rulerPoints[0x0], rulerPoints[0x1])[_0x117787(0x265)](0.5);
+            _0x376a8a[_0x117787(0x207)](camera), _0xa39b83[_0x117787(0x258)][_0x117787(0x234)] = (_0x376a8a['x'] + 0x1) * window[_0x117787(0x268)] / 0x2 + 'px', _0xa39b83[_0x117787(0x258)][_0x117787(0x27f)] = -(_0x376a8a['y'] - 0x1) * window[_0x117787(0x285)] / 0x2 + 'px', _0xa39b83['innerText'] = _0x26a255[_0x117787(0x1e8)](0x1) + _0x117787(0x1ee), _0xa39b83[_0x117787(0x258)][_0x117787(0x214)] = 'block';
+        } else {
+            const _0x2bf413 = _0x52ef54[_0x117787(0x228)][_0x117787(0x261)][0x0];
+            if (!_0x2bf413)
+                return;
+            const _0x13e097 = new _0x3fedfa();
+            _0x13e097['onload'] = _0x106f66 => {
+                const _0x26c157 = _0x117787, _0x590e6a = new _0x141e1a[(_0x26c157(0x27c))]()[_0x26c157(0x282)](_0x106f66[_0x26c157(0x228)][_0x26c157(0x267)]);
+                _0x590e6a['center']();
+                const _0x204388 = new _0x5a3ad6[(_0x26c157(0x1ef))](_0x590e6a, _0x4d164f);
+                _0x204388[_0x26c157(0x225)][_0x26c157(0x284)] = _0x2bf413[_0x26c157(0x236)][_0x26c157(0x266)](_0x26c157(0x20c), ''), _0x405125[_0x26c157(0x275)](_0x204388), _0x1ed312['push'](_0x204388), _0x279b60(), _0x108e89(_0x48c4cd[_0x26c157(0x28b)] - 0x1);
+            }, _0x13e097[_0x117787(0x25e)](_0x2bf413);
+        }
+    }
+    if (document['getElementById'](_0x117787(0x217))[_0x117787(0x226)])
+        groupeAssemblage[_0x117787(0x202)]['z'] += 0.01;
+    renderer['render'](scene, camera);
+}
+animate(), document['querySelectorAll'](_0x14f486(0x26c))[_0x14f486(0x27a)](_0x386f47 => _0x386f47['onclick'] = () => {
+    const _0x4571e4 = _0x14f486, _0x5e528d = _0x386f47[_0x4571e4(0x22c)], _0x122ae4 = _0x386f47['classList'][_0x4571e4(0x21f)]('actif');
+    _0x5e528d['style'][_0x4571e4(0x1f1)] = _0x122ae4 ? _0x5e528d[_0x4571e4(0x20d)] + 0x96 + 'px' : '0';
+}), document[_0x14f486(0x1f8)](_0x14f486(0x26b))[_0x14f486(0x23b)] = () => document[_0x14f486(0x1f8)](_0x14f486(0x210))[_0x14f486(0x260)]['toggle'](_0x14f486(0x1f7)), window[_0x14f486(0x280)]('resize', () => {
+    const _0x3d151d = _0x14f486;
+    camera['aspect'] = window[_0x3d151d(0x268)] / window[_0x3d151d(0x285)], camera[_0x3d151d(0x27b)](), renderer[_0x3d151d(0x255)](window[_0x3d151d(0x268)], window[_0x3d151d(0x285)]);
+});
+</script>
+</body>
+</html>
